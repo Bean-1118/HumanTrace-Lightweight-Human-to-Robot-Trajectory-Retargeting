@@ -26,19 +26,19 @@ The final HumanTrace run successfully completes the LIBERO task:
 
 > **Pick up the black bowl from the table centre and place it on the plate.**
 
-Final result:
+### Key Results
 
-| Metric | Result |
-|---|---:|
-| LIBERO reward | **1.0** |
-| Task completed | **True** |
-| Final bowl-to-plate XY error | **5.4 mm** |
+- Complete LIBERO pick-and-place: **success**
+- Human-derived maximum lateral deviation from straight line: **146 mm**
+- Mean robot tracking error: **7.3 mm**
+- Final bowl-to-plate XY error: **5.4 mm**
+- LIBERO reward: **1.0**
 
 ---
 
 ## Core Idea
 
-HumanTrace separates manipulation into two parts:
+HumanTrace separates manipulation into two components:
 
 ```text
 Robot-specific interaction
@@ -46,27 +46,63 @@ Robot-specific interaction
 Human-derived transport geometry
 ```
 
-The Panda-specific primitive handles the embodiment-dependent interaction:
+The Panda-specific primitive handles embodiment-dependent grasp and lift behaviour.
 
-```text
-approach → grasp → lift
-```
-
-The personally collected human demonstration determines:
-
-```text
-the geometry of the transport trajectory
-```
+The personally collected human demonstration determines the geometry of the post-grasp transport path.
 
 Placement and release are then handled by a simple robot-specific controller.
 
 This separation is intentional.
 
-Grasping depends strongly on gripper geometry, end-effector orientation, contact dynamics, and robot embodiment. In contrast, the overall geometric structure of a demonstrated transport motion can be transferred between embodiments.
+Grasping depends strongly on gripper geometry, end-effector orientation, contact dynamics, timing, and robot embodiment. In contrast, the geometric structure of a demonstrated transport motion can be transferred between embodiments.
 
-The key contribution of the personally collected data is therefore explicit:
+---
 
-> **the human demonstration directly changes the path followed by the robot while transporting the grasped object.**
+## What Is Actually Driven by My Data?
+
+The personally collected human demonstration is not used only for visualisation or offline analysis.
+
+It directly determines the robot's transport trajectory after grasping.
+
+In the final controlled experiment:
+
+- the robot initial state is fixed,
+- the grasp primitive is fixed,
+- the controller is fixed,
+- the number of transport waypoints is fixed,
+- the placement procedure is fixed,
+- the target object is fixed,
+- the destination is fixed.
+
+The only changed component is the transport trajectory.
+
+For HumanTrace, this trajectory is generated from my personally collected human demonstration.
+
+For the baseline, it is replaced by a straight-line interpolation.
+
+This makes the effect of the collected human data directly observable and measurable.
+
+---
+
+## Why This Approach?
+
+I deliberately chose a lightweight geometric retargeting pipeline rather than immediately training a large policy.
+
+The challenge requires personally collected data to have a meaningful effect on robot behaviour, so I wanted that dependency to be explicit and easy to verify.
+
+The pipeline provides a clear causal chain:
+
+```text
+human motion geometry
+        ↓
+retargeted robot waypoints
+        ↓
+robot transport behaviour
+```
+
+This also makes it possible to build a controlled straight-line baseline and directly measure the effect of the human demonstration.
+
+The main trade-off is that grasping remains robot-specific rather than being learned from the human demonstration.
 
 ---
 
@@ -105,7 +141,7 @@ The demonstrator moves an object along a deliberately curved path rather than ta
 
 The raw video is not included in the public repository in order to keep the submission lightweight. It is excluded through `.gitignore`.
 
-All trajectory data derived from the recording is included under:
+All processed trajectory data derived from the recording is included under:
 
 ```text
 data/processed/
@@ -121,33 +157,32 @@ The transport phase was then isolated and processed into a compact robot-transfe
 
 The manually labelled image-space trajectory contains small annotation noise and non-uniform temporal spacing.
 
-The processing pipeline therefore performs several operations.
+A Savitzky-Golay filter is applied to reduce annotation noise while preserving the overall demonstrated motion shape.
 
 ### Raw trajectory and smoothing
 
-A Savitzky-Golay filter is applied to reduce annotation noise while preserving the overall shape of the demonstrated motion.
-
 ![Raw vs Smoothed Human Trajectory](results/human_trajectory_raw_vs_smooth.png)
 
-The trajectory is then converted into relative displacement from the beginning of the selected transport phase.
+The trajectory is then:
 
-The image-space vertical direction is flipped so that the representation follows a Cartesian-style coordinate convention.
-
-The resulting trajectory is normalized while preserving its geometric shape.
+- converted to relative displacement,
+- vertically flipped to match a Cartesian-style convention,
+- normalized while preserving geometric shape,
+- resampled by arc length.
 
 ### Normalized trajectory
 
 ![Normalized Human Trajectory](results/human_trajectory_normalized.png)
 
-Finally, arc-length resampling converts the trajectory into **20 approximately equally spaced waypoints**.
+The final representation contains **20 approximately equally spaced waypoints**.
 
-This produces a lightweight motion representation that can be transferred to a robot with a different workspace size and orientation.
+This produces a compact motion representation that can be transferred to a robot with a different workspace size and orientation.
 
 ---
 
 ## 3. Human-to-Robot Retargeting
 
-Let the processed human trajectory be
+Let the processed human trajectory be:
 
 ```text
 p_h(t)
@@ -165,9 +200,9 @@ where:
 - `s` scales the demonstrated displacement to the robot task distance,
 - `p_start` translates the transformed trajectory to the robot's transport start position.
 
-This transformation preserves the **shape of the human motion** while adapting it to the robot workspace.
+This preserves the **shape of the human motion** while adapting it to the robot workspace.
 
-For the successful HumanTrace run:
+For the final successful HumanTrace run:
 
 ```text
 Human trajectory endpoint:
@@ -189,13 +224,13 @@ The transformed trajectory therefore ends at the correct planar task displacemen
 
 ## 4. Robot-Specific Grasp Primitive
 
-Trajectory following was relatively straightforward, but stable object grasping proved much more embodiment-dependent.
+Stable grasping proved substantially more embodiment-dependent than trajectory following.
 
 An initial position-only approach was tested using a brute-force search across **48 candidate grasp positions** around the bowl rim.
 
 None produced a reliable lift.
 
-This indicated that successful grasping depends on more than Cartesian position alone, including:
+This showed that grasp success depends on more than Cartesian position alone, including:
 
 - end-effector orientation,
 - contact geometry,
@@ -223,15 +258,15 @@ and is only a few kilobytes in size.
 
 Importantly:
 
-> **The LIBERO primitive is used for embodiment-specific grasp and lift behaviour only. The transport path after grasping is generated from the personally collected human demonstration.**
+> **The LIBERO primitive is used only for embodiment-specific grasp and lift behaviour. The transport path after grasping is generated from the personally collected human demonstration.**
 
-The full official LIBERO demonstration dataset is not required by the final HumanTrace repository.
+The full official LIBERO demonstration dataset is not required by the final repository.
 
 ---
 
 ## 5. Complete HumanTrace Pick-and-Place
 
-The final execution follows this sequence:
+The final HumanTrace execution follows:
 
 ```text
 Initial task state
@@ -255,7 +290,7 @@ Retract
 Task success
 ```
 
-The final HumanTrace execution achieved:
+The final HumanTrace run achieved:
 
 ```text
 Final bowl-to-plate XY error: 0.0054 m
@@ -275,21 +310,20 @@ This directory corresponds to the **HumanTrace human-derived transport experimen
 
 ## 6. Straight-Line Baseline
 
-A controlled straight-line baseline is included to show that the personally collected human trajectory has a real and measurable effect on robot behaviour.
+A controlled straight-line baseline is included to verify that the human demonstration actually changes robot behaviour.
 
-The HumanTrace and straight-line experiments use the same:
+Both experiments use exactly the same:
 
 - initial simulator state,
 - Panda grasp primitive,
-- controller parameters,
+- controller,
 - number of transport waypoints,
-- transport start,
+- start location,
 - destination,
-- alignment procedure,
 - placement procedure,
 - release procedure.
 
-The only experimental difference is the transport geometry.
+The only difference is transport geometry.
 
 ```text
 HumanTrace:
@@ -299,21 +333,21 @@ Straight-line baseline:
 linear interpolation from start to goal
 ```
 
-The corresponding result directories are:
+The result folders correspond to the two experiments:
 
 ```text
 results/final_pick_place/
 ```
 
-for the **HumanTrace experiment**, and
+contains the **HumanTrace experiment**.
 
 ```text
 results/final_pick_place_straight/
 ```
 
-for the **straight-line baseline**.
+contains the **straight-line baseline**.
 
-Both are complete pick-and-place experiments.
+Both are complete pick-and-place runs under the same experimental conditions.
 
 ---
 
@@ -332,34 +366,38 @@ Both are complete pick-and-place experiments.
 
 The straight-line baseline is naturally shorter.
 
-HumanTrace is **not** intended to outperform a straight line in path length. A straight line is expected to be the geometrically shortest route between the same endpoints.
+HumanTrace is **not** intended to outperform a straight line in path length.
 
-Instead, the experiment tests whether the non-linear structure of a human motion can be transferred to a robot **without sacrificing successful task execution**.
+The experiment instead asks whether the non-linear structure of human motion can be preserved while maintaining successful manipulation.
 
-The largest lateral deviation from the direct start-to-goal line was:
+The answer is yes.
+
+The HumanTrace path exhibits:
 
 ```text
+Maximum lateral deviation:
+
 HumanTrace:    146 mm
 Straight line: ~0 mm
 ```
 
-This shows that the human demonstration produced a substantial and measurable change in robot transport geometry.
-
-At the same time, controller tracking remained almost identical:
+while maintaining almost identical tracking performance:
 
 ```text
-HumanTrace mean tracking error:    7.3 mm
-Straight-line mean tracking error: 7.4 mm
+Mean tracking error:
+
+HumanTrace:    7.3 mm
+Straight line: 7.4 mm
 ```
 
-and final placement accuracy was also essentially unchanged:
+and nearly identical final placement accuracy:
 
 ```text
-HumanTrace final placement error:    5.4 mm
-Straight-line final placement error: 5.5 mm
+HumanTrace:    5.4 mm
+Straight line: 5.5 mm
 ```
 
-Both approaches completed the LIBERO task successfully.
+Both methods complete the task successfully.
 
 ---
 
@@ -367,13 +405,11 @@ Both approaches completed the LIBERO task successfully.
 
 The purpose of HumanTrace is not to generate the shortest possible trajectory.
 
-The result is instead:
+The main result is:
 
 > **A personally collected human manipulation demonstration can directly and measurably alter the geometry of robot behaviour while preserving successful task execution.**
 
-The robot does not simply collapse the manipulation into a direct start-to-goal trajectory.
-
-It retains the non-linear geometric structure of the demonstrated human motion.
+The robot retains the non-linear geometric structure of the demonstrated human motion rather than collapsing the transport phase into a direct start-to-goal movement.
 
 ---
 
@@ -427,12 +463,12 @@ HumanTrace/
 
 ## Running the Project
 
-The project was developed with:
+The project was developed using:
 
 ```text
 Python 3.8
 LIBERO
-robosuite
+robosuite 1.4.0
 MuJoCo
 NumPy
 Pandas
@@ -446,17 +482,12 @@ imageio
 
 ## What Worked
 
-Manual trajectory annotation proved sufficient for a lightweight prototype.
-
-Savitzky-Golay smoothing reduced annotation noise without removing the overall demonstrated motion shape.
-
-Arc-length resampling produced stable waypoint spacing.
-
-The 2D similarity transform successfully adapted the human trajectory to a different robot workspace.
-
-The Panda maintained a stable grasp while following the curved human-derived path.
-
-Finally, the complete LIBERO manipulation task was successfully completed.
+- Manual trajectory annotation was sufficient for a lightweight prototype.
+- Savitzky-Golay smoothing reduced annotation noise while preserving motion shape.
+- Arc-length resampling produced stable waypoint spacing.
+- The 2D similarity transform adapted the human trajectory to a different robot workspace.
+- The Panda maintained a stable grasp while following the curved human-derived path.
+- The complete LIBERO manipulation task completed successfully.
 
 ---
 
@@ -472,7 +503,7 @@ This failure highlighted an important distinction between:
 embodiment-specific interaction
 ```
 
-and
+and:
 
 ```text
 transferable motion geometry
@@ -488,7 +519,7 @@ This prototype currently uses:
 
 - one personally collected human demonstration,
 - manual rather than automatic trajectory extraction,
-- planar 2D trajectory retargeting,
+- planar 2D retargeting,
 - one LIBERO manipulation task,
 - one Panda-specific grasp primitive,
 - no learned grasp policy,
@@ -505,7 +536,8 @@ Natural extensions include:
 - automatic object tracking from RGB video,
 - multiple human demonstrations,
 - 3D trajectory reconstruction,
-- obstacle-aware trajectory transfer,
+- obstacle-aware human trajectory transfer,
 - evaluation across multiple LIBERO tasks,
 - learned grasp primitives,
 - adaptation across different robot embodiments.
+
